@@ -4,6 +4,8 @@ import Image from "next/image";
 import { useEffect, useState, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import io from "socket.io-client";
+import { database } from "../config/firebase";
+import { ref, onValue } from "firebase/database";
 
 const socket = io("http://localhost:5000");
 
@@ -12,6 +14,7 @@ const Home = () => {
   const [tokens, setTokens] = useState<string>("BXQWE");
   const [hideShow, setHideShow] = useState<boolean>(false);
   const [countdown, setCountdown] = useState<number>(60);
+  const [isEnabled, setIsEnabled] = useState<boolean>(false);
   const countdownRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
@@ -30,6 +33,37 @@ const Home = () => {
     const interval = setInterval(updateTime, 60000);
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    const dataRef = ref(database, "activation");
+    console.log("DEBUG here 1");
+    const unsubscribe = onValue(dataRef, async (snapshot) => {
+      const fetchData = snapshot.val();
+      console.log("DEBUG here 2");
+      if (fetchData) {
+        setIsEnabled(fetchData.enabled);
+        console.log("DEBUG here 3: " + fetchData.enabled);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    console.log("isEnabled state changed:", isEnabled);
+
+    if (isEnabled) {
+      // Signal backend to generate voucher
+      fetch("http://localhost:5000/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          console.log("Voucher requested, backend responded:", data);
+        })
+        .catch((err) => console.error("Error generating voucher:", err));
+    }
+  }, [isEnabled]);
 
   useEffect(() => {
     socket.on("connect", () => console.log("Connected to WebSocket Server"));
@@ -145,7 +179,7 @@ const Home = () => {
         <div className="relative flex items-center justify-center w-[120px] h-[120px]">
           <svg height={radius * 2} width={radius * 2}>
             <circle
-              stroke="#d1d5db" // gray-300 background
+              stroke="#d1d5db"
               fill="transparent"
               strokeWidth={stroke}
               r={normalizedRadius}
@@ -153,7 +187,7 @@ const Home = () => {
               cy={radius}
             />
             <circle
-              stroke="#3b82f6" // blue progress
+              stroke="#3b82f6"
               fill="transparent"
               strokeWidth={stroke}
               strokeDasharray={circumference + " " + circumference}
